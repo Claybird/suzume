@@ -34,7 +34,7 @@ int UtilGetCommandLineParams(std::vector<CString> &rParams)
 
 CAppModule _Module;
 
-class CMyWindow : public CWindowImpl<CMyWindow>,public CMessageFilter
+class CMyWindow : public CWindowImpl<CMyWindow>
 {
 public:
 	CMyWindow(CSVGImage &_image):image(_image){}
@@ -42,9 +42,6 @@ public:
 	DECLARE_WND_CLASS(_T("SVG_GDIPLUS"));
 	CSVGImage &image;
 private:
-	virtual BOOL PreTranslateMessage(MSG* pMsg){return FALSE;}
-
-	// メッセージマップ
 	BEGIN_MSG_MAP_EX(CMyWindow)
 		MSG_WM_PAINT(OnPaint)
 		MSG_WM_CREATE(OnCreate)
@@ -57,14 +54,14 @@ private:
 		RECT rc;
 		GetClientRect(&rc);
 		graphics.FillRectangle(&brush,Gdiplus::RectF((float)rc.left,(float)rc.top,(float)(rc.right-rc.left),(float)(rc.bottom-rc.top)));
-		image.render(graphics);
+
+		//render
+		//NOTE: you can specify more complicated transforms by calling graphics.SetTransform()
+		image.render(graphics,0.0f,0.0f);
 		ValidateRect(NULL);
 	}
 
-	LRESULT OnCreate(LPCREATESTRUCT lpcs){
-		CMessageLoop* pLoop = _Module.GetMessageLoop();
-		pLoop->AddMessageFilter(this);
-
+	LRESULT OnCreate(LPCREATESTRUCT){
 		CString strTitle;
 		strTitle.Format(_T("The Suzume SVG example - %.2f x %.2f"),image.getCanvasWidth(),image.getCanvasHeight());
 		SetWindowText(strTitle);
@@ -77,7 +74,6 @@ private:
 	}
 };
 
-//エントリーポイント
 int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR lpCmdLine, int nCmdShow)
 {
 #if defined(_DEBUG)

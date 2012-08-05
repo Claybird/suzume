@@ -183,12 +183,12 @@ Gdiplus::Color parseHexColor(LPCTSTR lpColor,LPCTSTR lpOpacity)
 {
 	using namespace suzume;
 	CAtlString strColor=lpColor;
-	int r=_tcstol(strColor.Mid(0,2),NULL,16);
-	int g=_tcstol(strColor.Mid(2,2),NULL,16);
-	int b=_tcstol(strColor.Mid(4,2),NULL,16);
-	int a=255;
+	BYTE r=(BYTE)_tcstol(strColor.Mid(0,2),NULL,16);
+	BYTE g=(BYTE)_tcstol(strColor.Mid(2,2),NULL,16);
+	BYTE b=(BYTE)_tcstol(strColor.Mid(4,2),NULL,16);
+	BYTE a=255;
 	if(lpOpacity && *lpOpacity){
-		a=min(255,(int)(fmax(0.0,toFloat(lpOpacity,1.0f))*255.0f));
+		a=(BYTE)min(255,(int)(fmax(0.0,toFloat(lpOpacity,1.0f))*255.0f));
 	}
 
 	return Gdiplus::Color(a,r,g,b);
@@ -236,7 +236,8 @@ HRESULT parseTransform(Gdiplus::Matrix& mat,IXMLDOMElementPtr element,LPCTSTR lp
 		const CAtlString &s=transforms[i];
 
 		if(6==_stscanf(s,_T("matrix(%f,%f,%f,%f,%f,%f)"),&a,&b,&c,&d,&e,&f)){
-			mat.Multiply(&Gdiplus::Matrix(a,b,c,d,e,f));
+			Gdiplus::Matrix matTmp(a,b,c,d,e,f);
+			mat.Multiply(&matTmp);
 		}else if(2==_stscanf(s,_T("translate(%f,%f)"),&x,&y)){
 			mat.Translate(x,y);
 		}else if(1==_stscanf(s,_T("translate(%f)"),&x)){
@@ -250,9 +251,11 @@ HRESULT parseTransform(Gdiplus::Matrix& mat,IXMLDOMElementPtr element,LPCTSTR lp
 		}else if(1==_stscanf(s,_T("scale(%f)"),&x)){
 			mat.Scale(x,x);
 		}else if(1==_stscanf(s,_T("skewX(%f)"),&x)){
-			mat.Multiply(&Gdiplus::Matrix(1.0f,0.0f,tan(x),1.0f,0.0f,0.0f));
+			Gdiplus::Matrix matTmp(1.0f,0.0f,tan(x),1.0f,0.0f,0.0f);
+			mat.Multiply(&matTmp);
 		}else if(1==_stscanf(s,_T("skewY(%f)"),&y)){
-			mat.Multiply(&Gdiplus::Matrix(1.0f,tan(y),0.0f,1.0f,0.0f,0.0f));
+			Gdiplus::Matrix matTmp(1.0f,tan(y),0.0f,1.0f,0.0f,0.0f);
+			mat.Multiply(&matTmp);
 		}
 	}
 
@@ -430,12 +433,12 @@ void parseStyleFill(IXMLDOMElementPtr element,std::map<std::wstring,std::wstring
 			return;
 		}else{
 			LPCTSTR lpOpacity=propDict[_T("fill-opacity")].c_str();
-			int a=255;
+			BYTE a=255;
 			if(lpOpacity && *lpOpacity){
-				a=min(255,(int)(fmax(0.0,toFloat(lpOpacity,1.0f))*255.0f));
+				a=(BYTE)min(255,(int)(fmax(0.0,toFloat(lpOpacity,1.0f))*255.0f));
 			}
 
-			Gdiplus::Color color=Gdiplus::Color(a,GetRValue(refColor),GetGValue(refColor),GetBValue(refColor));
+			Gdiplus::Color color=Gdiplus::Color(a,(BYTE)GetRValue(refColor),(BYTE)GetGValue(refColor),(BYTE)GetBValue(refColor));
 			*ppFill=new Gdiplus::SolidBrush(color);
 		}
 	}
@@ -465,12 +468,12 @@ void parseStyleStroke(std::map<std::wstring,std::wstring> &propDict,Gdiplus::Pen
 			return;
 		}else{
 			LPCTSTR lpOpacity=propDict[_T("stroke-opacity")].c_str();
-			int a=255;
+			BYTE a=255;
 			if(lpOpacity && *lpOpacity){
-				a=min(255,(int)(fmax(0.0f,toFloat(lpOpacity,1.0f))*255.0f));
+				a=(BYTE)min(255,(int)(fmax(0.0f,toFloat(lpOpacity,1.0f))*255.0f));
 			}
 
-			color=Gdiplus::Color(a,GetRValue(refColor),GetGValue(refColor),GetBValue(refColor));
+			color=Gdiplus::Color(a,(BYTE)GetRValue(refColor),(BYTE)GetGValue(refColor),(BYTE)GetBValue(refColor));
 		}
 	}
 
@@ -1465,8 +1468,14 @@ CSVGElementPath* CSVGImage::addPath()
 	return pPath;
 }
 
-void CSVGImage::render(Gdiplus::Graphics &graphics)
+void CSVGImage::render(Gdiplus::Graphics &graphics,float left,float top,float scaleX,float scaleY)
 {
+	Gdiplus::Matrix matOld,matTrans;
+	matTrans.Scale(scaleX,scaleY);
+	matTrans.Translate(left,top);
+	graphics.GetTransform(&matOld);
+	graphics.SetTransform(&matTrans);
+
 	Gdiplus::SmoothingMode sm = graphics.GetSmoothingMode();
 	Gdiplus::PixelOffsetMode pom = graphics.GetPixelOffsetMode();
 	Gdiplus::CompositingMode comm=graphics.GetCompositingMode();
@@ -1485,6 +1494,8 @@ void CSVGImage::render(Gdiplus::Graphics &graphics)
 	graphics.SetPixelOffsetMode(pom);
 	graphics.SetCompositingMode(comm);
 	graphics.SetCompositingQuality(comq);
+
+	graphics.SetTransform(&matOld);
 }
 
 HRESULT CSVGImage::load(LPCTSTR lpszFilename,BOOL bValidate)
@@ -1552,4 +1563,5 @@ HRESULT CSVGImage::load(LPCTSTR lpszFilename,BOOL bValidate)
 			suzume::recursiveBuildVectorImage(*this,nodeSVG);
 		}
 	}
+	return S_OK;
 }

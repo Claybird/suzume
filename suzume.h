@@ -123,7 +123,7 @@ public:
 	CSVGElementRect* addRect(float x,float y,float width,float height,float rx,float ry);
 	CSVGElementCircle* addCircle(float x,float y,float r);
 	CSVGElementPath* addPath();
-	void render(Gdiplus::Graphics &graphics);
+	void render(Gdiplus::Graphics &graphics,float left,float top,float scaleX=1.0f,float scaleY=1.0f);
 	LPCTSTR getLastError()const;
 	HRESULT load(LPCTSTR lpszFilename,BOOL bValidate=FALSE);
 };
