@@ -1471,8 +1471,8 @@ CSVGElementPath* CSVGImage::addPath()
 void CSVGImage::render(Gdiplus::Graphics &graphics,float left,float top,float scaleX,float scaleY)
 {
 	Gdiplus::Matrix matOld,matTrans;
-	matTrans.Scale(scaleX,scaleY);
 	matTrans.Translate(left,top);
+	matTrans.Scale(scaleX,scaleY);
 	graphics.GetTransform(&matOld);
 	graphics.SetTransform(&matTrans);
 
