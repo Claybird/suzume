@@ -33,6 +33,10 @@ namespace suzume{
 inline float fmax(float x,float y){return x>y ? x : y;}
 #endif fmax
 
+#ifndef fmin
+inline float fmin(float x,float y){return x<y ? x : y;}
+#endif fmin
+
 #ifndef COUNTOF
 #define COUNTOF(x) (sizeof(x)/sizeof(x[0]))
 #endif

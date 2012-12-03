@@ -26,6 +26,10 @@ The following is a part of unsupported features.
 
 
 [History]
+- Ver.0.03 Dec. 3, 2012
+  added: new support on 3-digit hex color code
+  added: new support on "optimized" coordinate expression
+  added: new support on opacit in <g>
 - Ver.0.02 Aug. 5, 2012
   fixed: lost return in CSVGImage::load()
   added: location and scaling parameter in CSVGImage::render()

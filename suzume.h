@@ -49,7 +49,7 @@ public:
 	void pushSkewY(float angle);
 	void pushMatrix(float a,float b,float c,float d,float e,float f);
 	void setTransform(const Gdiplus::Matrix &mat);
-	virtual void render(Gdiplus::Graphics&)=0;
+	virtual void render(Gdiplus::Graphics&,float canvasX,float canvasY)=0;
 };
 
 class CSVGElementRect:public CSVGElementBase{
@@ -61,7 +61,7 @@ public:
 	CSVGElementRect();
 	virtual ~CSVGElementRect();
 	void setParams(float x,float y,float width,float height,float rx,float ry);
-	void render(Gdiplus::Graphics& graphics);
+	void render(Gdiplus::Graphics& graphics,float canvasX,float canvasY);
 };
 
 class CSVGElementCircle:public CSVGElementBase{
@@ -71,7 +71,7 @@ public:
 	CSVGElementCircle();
 	virtual ~CSVGElementCircle();
 	void setParams(float x,float y,float r);
-	void render(Gdiplus::Graphics& graphics);
+	void render(Gdiplus::Graphics& graphics,float canvasX,float canvasY);
 };
 
 class CSVGElementPath:public CSVGElementBase{
@@ -100,11 +100,11 @@ public:
 	void closePath();
 	bool isClosed()const;
 	const Gdiplus::PointF& getLastPos()const;
-	void render(Gdiplus::Graphics& graphics);
+	void render(Gdiplus::Graphics& graphics,float canvasX,float canvasY);
 	void getBounds(Gdiplus::RectF& bounds)const;
 };
 
-
+class CSVGElementGroup;
 class CSVGImage{
 protected:
 	std::vector<CSVGElementBase*> _elements;
@@ -123,8 +123,22 @@ public:
 	CSVGElementRect* addRect(float x,float y,float width,float height,float rx,float ry);
 	CSVGElementCircle* addCircle(float x,float y,float r);
 	CSVGElementPath* addPath();
+	CSVGElementGroup* addGroup();
+	void render(Gdiplus::Graphics &graphics);
 	void render(Gdiplus::Graphics &graphics,float left,float top,float scaleX=1.0f,float scaleY=1.0f);
 	LPCTSTR getLastError()const;
 	HRESULT load(LPCTSTR lpszFilename,BOOL bValidate=FALSE);
+};
+
+class CSVGElementGroup:public CSVGElementBase{
+protected:
+	float _opacity;
+	CSVGImage _image;
+public:
+	CSVGElementGroup();
+	virtual ~CSVGElementGroup();
+	void setOpacity(float opacity);
+	void render(Gdiplus::Graphics& graphics,float canvasX,float canvasY);
+	CSVGImage& getInternalImage();
 };
 

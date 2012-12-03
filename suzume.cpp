@@ -183,12 +183,21 @@ Gdiplus::Color parseHexColor(LPCTSTR lpColor,LPCTSTR lpOpacity)
 {
 	using namespace suzume;
 	CAtlString strColor=lpColor;
-	BYTE r=(BYTE)_tcstol(strColor.Mid(0,2),NULL,16);
-	BYTE g=(BYTE)_tcstol(strColor.Mid(2,2),NULL,16);
-	BYTE b=(BYTE)_tcstol(strColor.Mid(4,2),NULL,16);
-	BYTE a=255;
+
+	BYTE r=0,g=0,b=0,a=255;
+	if(strColor.GetLength()==6){
+		//6-digits color code
+		r=(BYTE)_tcstol(strColor.Mid(0,2),NULL,16);
+		g=(BYTE)_tcstol(strColor.Mid(2,2),NULL,16);
+		b=(BYTE)_tcstol(strColor.Mid(4,2),NULL,16);
+	}else{
+		//3-digits color code
+		r=(BYTE)(_tcstol(strColor.Mid(0,1),NULL,16)*17);	//17=16+1, 0xFF=0xF*17
+		g=(BYTE)(_tcstol(strColor.Mid(1,1),NULL,16)*17);
+		b=(BYTE)(_tcstol(strColor.Mid(2,1),NULL,16)*17);
+	}
 	if(lpOpacity && *lpOpacity){
-		a=(BYTE)min(255,(int)(fmax(0.0,toFloat(lpOpacity,1.0f))*255.0f));
+		a=(BYTE)min(255,(int)(fmax(0.0f,toFloat(lpOpacity,1.0f))*255.0f));
 	}
 
 	return Gdiplus::Color(a,r,g,b);
@@ -302,7 +311,7 @@ void parseGradationStops(IXMLDOMElementPtr element,std::vector<GRADATIONINFO>& c
 					LPCTSTR lpOpacity=propDict[_T("stop-opacity")].c_str();
 					int a=255;
 					if(lpOpacity && *lpOpacity){
-						a=min(255,(int)(fmax(0.0,toFloat(lpOpacity,1.0f))*255.0f));
+						a=min(255,(int)(fmax(0.0f,toFloat(lpOpacity,1.0f))*255.0f));
 					}
 
 					info.color=Gdiplus::Color(a,GetRValue(refColor),GetGValue(refColor),GetBValue(refColor));
@@ -367,7 +376,8 @@ void parseStyleFill(IXMLDOMElementPtr element,std::map<std::wstring,std::wstring
 		return;
 	}else if(strColor[0]==_T('#')){
 		//color code
-		Gdiplus::Color color=parseHexColor((LPCTSTR)strColor+1,propDict[_T("fill-opacity")].c_str());
+		LPCTSTR lpOpacity=propDict[_T("fill-opacity")].c_str();
+		Gdiplus::Color color=parseHexColor((LPCTSTR)strColor+1,lpOpacity);
 		*ppFill=new Gdiplus::SolidBrush(color);
 	}else if(-1!=strColor.Find(_T("url("))){
 		if(-1==strColor.Find(_T('#'))){
@@ -435,7 +445,7 @@ void parseStyleFill(IXMLDOMElementPtr element,std::map<std::wstring,std::wstring
 			LPCTSTR lpOpacity=propDict[_T("fill-opacity")].c_str();
 			BYTE a=255;
 			if(lpOpacity && *lpOpacity){
-				a=(BYTE)min(255,(int)(fmax(0.0,toFloat(lpOpacity,1.0f))*255.0f));
+				a=(BYTE)min(255,(int)(fmax(0.0f,toFloat(lpOpacity,1.0f))*255.0f));
 			}
 
 			Gdiplus::Color color=Gdiplus::Color(a,(BYTE)GetRValue(refColor),(BYTE)GetGValue(refColor),(BYTE)GetBValue(refColor));
@@ -456,7 +466,8 @@ void parseStyleStroke(std::map<std::wstring,std::wstring> &propDict,Gdiplus::Pen
 		return;
 	}else if(strColor[0]==_T('#')){
 		//color code
-		color=parseHexColor((LPCTSTR)strColor+1,propDict[_T("stroke-opacity")].c_str());
+		LPCTSTR lpOpacity=propDict[_T("stroke-opacity")].c_str();
+		color=parseHexColor((LPCTSTR)strColor+1,lpOpacity);
 	}else if(-1!=strColor.Find(_T("url("))){
 		//Unsupported format(including gradation)
 		//return;
@@ -775,12 +786,15 @@ HRESULT parsePath(CSVGImage& image,IXMLDOMNodePtr node)
 	strPath.Remove(_T('\r'));
 	strPath.Remove(_T('\n'));
 
+	//some coordinates are written without any space like "100-200" which means "100,-200"
+	strPath.Replace(_T("-"),_T(" -"));
+
 	//separate command and coordinates
 	LPCTSTR lpCommands=_T("MmLlHhVvCcSsZzQqTtAa");
 	for(LPCTSTR p=lpCommands;*p;p++){
 		CAtlString oldValue=*p;
 		CAtlString newValue=*p;
-		newValue+=_T(' ');
+		newValue=_T(' ')+newValue+_T(' ');
 		strPath.Replace(oldValue,newValue);
 	}
 
@@ -870,6 +884,24 @@ HRESULT parsePath(CSVGImage& image,IXMLDOMNodePtr node)
 	return S_OK;
 }
 
+HRESULT recursiveBuildVectorImage(CSVGImage &image,IXMLDOMNodePtr node);
+
+HRESULT parseGroup(CSVGImage &image,IXMLDOMNodePtr element)
+{
+	std::map<std::wstring,std::wstring> propDict;
+	recursiveMakePropDict(element,propDict);
+
+	CSVGElementGroup* pGroup=image.addGroup();
+
+	//opacity : this opacity works on rendered result of group children. This opacity is not inherited to children.
+	LPCTSTR lpOpacity=propDict[_T("opacity")].c_str();
+	float a=fmin(1.0f,(fmax(0.0f,toFloat(lpOpacity,1.0f))));
+	pGroup->setOpacity(a);
+
+	recursiveBuildVectorImage(pGroup->getInternalImage(),element);
+
+	return S_OK;
+}
 
 HRESULT recursiveBuildVectorImage(CSVGImage &image,IXMLDOMNodePtr node)
 {
@@ -895,7 +927,9 @@ HRESULT recursiveBuildVectorImage(CSVGImage &image,IXMLDOMNodePtr node)
 			//do not recursive process
 			continue;
 		}else if(nodeName==_T("g")){
-			//nothing to do
+			parseGroup(image,child);
+			//recursive parsing on different image
+			continue;
 		}else if(nodeName==_T("rect")){
 			parseRect(image,child);
 		}else if(nodeName==_T("circle")){
@@ -1009,7 +1043,7 @@ void CSVGElementRect::setParams(float x,float y,float width,float height,float r
 	_ry=ry;
 }
 
-void CSVGElementRect::render(Gdiplus::Graphics& graphics)
+void CSVGElementRect::render(Gdiplus::Graphics& graphics,float,float)
 {
 	//copy & multiply : representing matrix stack
 	Gdiplus::Matrix matOld;
@@ -1017,11 +1051,11 @@ void CSVGElementRect::render(Gdiplus::Graphics& graphics)
 	graphics.MultiplyTransform(&_matrix);
 
 	float rx=_rx,ry=_ry;
-	if(rx>0.0 || ry>0.0){
+	if(rx>0.0f || ry>0.0f){
 		//drawing a rounded rectangle with path as combination of arcs
-		if(rx==0.0){
+		if(rx==0.0f){
 			rx=ry;
-		}else if(ry==0.0){
+		}else if(ry==0.0f){
 			ry=rx;
 		}
 		Gdiplus::GraphicsPath path;
@@ -1067,7 +1101,7 @@ void CSVGElementCircle::setParams(float x,float y,float r)
 	_r=r;
 }
 
-void CSVGElementCircle::render(Gdiplus::Graphics& graphics)
+void CSVGElementCircle::render(Gdiplus::Graphics& graphics,float,float)
 {
 	//copy & multiply : representing matrix stack
 	Gdiplus::Matrix matOld;
@@ -1358,7 +1392,7 @@ const Gdiplus::PointF& CSVGElementPath::getLastPos()const
 	return _lastPos;
 }
 
-void CSVGElementPath::render(Gdiplus::Graphics& graphics)
+void CSVGElementPath::render(Gdiplus::Graphics& graphics,float,float)
 {
 	//copy & multiply : representing matrix stack
 	Gdiplus::Matrix matOld;
@@ -1384,6 +1418,65 @@ void CSVGElementPath::render(Gdiplus::Graphics& graphics)
 void CSVGElementPath::getBounds(Gdiplus::RectF& bounds)const
 {
 	_path.GetBounds(&bounds,NULL,NULL);
+}
+
+//----------
+
+CSVGElementGroup::CSVGElementGroup():_opacity(0.0f)
+{
+}
+
+CSVGElementGroup::~CSVGElementGroup()
+{
+}
+
+void CSVGElementGroup::setOpacity(float opacity)
+{
+	_opacity=opacity;
+}
+
+void CSVGElementGroup::render(Gdiplus::Graphics& parent_graphics,float _canvasX,float _canvasY)
+{
+	//temporary copy parent transform
+	Gdiplus::Matrix matTransform;
+	parent_graphics.GetTransform(&matTransform);
+	float matElements[6];
+	matTransform.GetElements(matElements);
+	float canvasX=_canvasX * matElements[0] + _canvasY * matElements[1];
+	float canvasY=_canvasX * matElements[2] + _canvasY * matElements[3];
+
+	_image.setCanvasSize(canvasX,canvasY);
+	UINT width=(UINT)(canvasX+0.5),height=(UINT)(canvasY+0.5);
+	Gdiplus::Bitmap* pBitmap=new Gdiplus::Bitmap(width,height);
+	Gdiplus::Graphics graphics(pBitmap);
+	graphics.SetTransform(&matTransform);
+
+	//render children
+	_image.render(graphics);
+
+	//paste on parent graphics object
+	Gdiplus::ColorMatrix cmat = {
+		1.0f, 0.0f, 0.0f, 0.0f, 0.0f,   // Red
+		0.0f, 1.0f, 0.0f, 0.0f, 0.0f,   // Green
+		0.0f, 0.0f, 1.0f, 0.0f, 0.0f,   // Blue
+		0.0f, 0.0f, 0.0f, _opacity, 0.0f,   // Alpha
+		0.0f, 0.0f, 0.0f, 0.0f, 1.0f    // must be 1
+	};
+	Gdiplus::ImageAttributes imgAttr;
+	imgAttr.SetColorMatrix(&cmat);
+
+	Gdiplus::RectF rect(0.0f,0.0f,canvasX,canvasY);
+
+	parent_graphics.ResetTransform();
+	parent_graphics.DrawImage(pBitmap,rect,0.0f,0.0f,canvasX,canvasY,Gdiplus::UnitPixel,&imgAttr);
+
+	parent_graphics.SetTransform(&matTransform);
+	delete pBitmap;
+}
+
+CSVGImage& CSVGElementGroup::getInternalImage()
+{
+	return _image;
 }
 
 //----------
@@ -1468,14 +1561,15 @@ CSVGElementPath* CSVGImage::addPath()
 	return pPath;
 }
 
-void CSVGImage::render(Gdiplus::Graphics &graphics,float left,float top,float scaleX,float scaleY)
+CSVGElementGroup* CSVGImage::addGroup()
 {
-	Gdiplus::Matrix matOld,matTrans;
-	matTrans.Translate(left,top);
-	matTrans.Scale(scaleX,scaleY);
-	graphics.GetTransform(&matOld);
-	graphics.SetTransform(&matTrans);
+	CSVGElementGroup* pGroup=new CSVGElementGroup;
+	_elements.push_back(pGroup);
+	return pGroup;
+}
 
+void CSVGImage::render(Gdiplus::Graphics &graphics)
+{
 	Gdiplus::SmoothingMode sm = graphics.GetSmoothingMode();
 	Gdiplus::PixelOffsetMode pom = graphics.GetPixelOffsetMode();
 	Gdiplus::CompositingMode comm=graphics.GetCompositingMode();
@@ -1487,13 +1581,24 @@ void CSVGImage::render(Gdiplus::Graphics &graphics,float left,float top,float sc
 	graphics.SetCompositingQuality(Gdiplus::CompositingQualityDefault);	//changing the CompositionQualityMode may affect the composited color
 
 	for(std::vector<CSVGElementBase*>::iterator ite=_elements.begin();ite!=_elements.end();++ite){
-		(*ite)->render(graphics);
+		(*ite)->render(graphics,_canvasWidth,_canvasHeight);
 	}
 
 	graphics.SetSmoothingMode(sm);
 	graphics.SetPixelOffsetMode(pom);
 	graphics.SetCompositingMode(comm);
 	graphics.SetCompositingQuality(comq);
+}
+
+void CSVGImage::render(Gdiplus::Graphics &graphics,float left,float top,float scaleX,float scaleY)
+{
+	Gdiplus::Matrix matOld,matTrans;
+	matTrans.Translate(left,top);
+	matTrans.Scale(scaleX,scaleY);
+	graphics.GetTransform(&matOld);
+	graphics.SetTransform(&matTrans);
+
+	render(graphics);
 
 	graphics.SetTransform(&matOld);
 }

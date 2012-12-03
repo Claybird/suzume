@@ -27,6 +27,10 @@ Suzume以外にライブラリを用意する必要がありません。
 
 
 [開発履歴]
+- Ver.0.03 Dec. 3, 2012
+  3桁の色コードに対応
+  座標の省略記法に対応
+  <g>に指定されたopacityに対応
 - Ver.0.02 Aug. 5, 2012
   CSVGImage::load()のreturn忘れを修正
   CSVGImage::render()に位置指定と拡大率指定を追加
